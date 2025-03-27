@@ -290,3 +290,13 @@ with tab2:
         st.warning("No overridden data found in the target table.")
     else:
         st.dataframe(overridden_data, use_container_width=True)
+
+
+# Footer
+if 'last_update_time' in st.session_state:
+    last_update_time = st.session_state.last_update_time
+    st.markdown("---")
+    st.caption(f"Portfolio Performance Override System • Last updated: {last_update_time}")
+else:
+    st.markdown("---")
+    st.caption("Portfolio Performance Override System • Last updated: N/A")
