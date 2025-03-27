@@ -84,7 +84,7 @@ session = connect_to_snowflake()
 # Retrieve Configuration Data from Override_Ref
 def fetch_override_ref_data(module_number):
     try:
-        df = session.sql(f"SELECT * FROM override_ref WHERE module = {module_number}").to_pandas()
+        df = session.sql(f"SELECT * FROM override_ref WHERE Module = {module_number}").to_pandas()
         return df
     except Exception as e:
         st.error(f"Error fetching Override_Ref data: {e}")
