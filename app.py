@@ -7,7 +7,7 @@ from datetime import datetime
 st.set_page_config(
     page_title="Editable Data Override App",
     page_icon="📊",
-    layout="wide"  # Match the layout you want
+    layout="centered"  # Match the layout you want
 )
 
 # Custom CSS for styling (consistent style)
