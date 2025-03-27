@@ -167,8 +167,8 @@ with tab1:
                     st.info("No changes detected. No records to insert.")
                     return
 
-                st.write("🟢 Detected Changes:")
-                st.dataframe(changes_df)
+               #st.write("🟢 Detected Changes:")
+                #st.dataframe(changes_df)
 
                 # Fetch the target table columns dynamically
                 target_columns_query = f"SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '{target_table.upper()}'"
