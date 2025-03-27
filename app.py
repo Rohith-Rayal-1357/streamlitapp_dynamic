@@ -7,7 +7,7 @@ from datetime import datetime
 st.set_page_config(
     page_title="Editable Data Override App",
     page_icon="📊",
-    layout="centered"  # Match the layout you want
+    layout="centered"
 )
 
 # Custom CSS for styling (consistent style)
@@ -20,7 +20,7 @@ st.markdown("""
         .stSelectbox>label {font-size: 16px;}
         .stDataFrame {border: 1px solid #dddddd; border-radius: 8px;}
         .module-box {
-            background-color: #D3E8FF; /* Ice-blue box for module */
+            background-color: #D3E8FF;
             padding: 15px;
             border-radius: 8px;
             font-size: 20px;
@@ -100,6 +100,26 @@ if override_ref_df.empty:
     st.warning("No configuration data found in Override_Ref.")
     st.stop()
 
+# Function to fetch all available tables (assuming you can query the schema for table names)
+def fetch_available_tables():
+    try:
+        query = "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'public'"
+        tables_df = session.sql(query).to_pandas()
+        return tables_df['TABLE_NAME'].tolist()
+    except Exception as e:
+        st.error(f"Error fetching available tables: {e}")
+        return []
+
+# Fetch available tables for source_table selection
+available_tables = fetch_available_tables()
+
+if not available_tables:
+    st.warning("No tables available to select.")
+    st.stop()
+
+# Select source table dynamically
+source_table = st.selectbox("Select Source Table", available_tables)
+
 # Function to fetch data from a given table
 def fetch_data(table_name):
     try:
@@ -112,11 +132,15 @@ def fetch_data(table_name):
         st.error(f"Error fetching data from {table_name}: {e}")
         return pd.DataFrame()
 
-# Extract source and target table names, editable column, and join keys
-source_table = override_ref_df['SOURCE_TABLE'].iloc[0]
-target_table = override_ref_df['TARGET_TABLE'].iloc[0]
-editable_column = override_ref_df['EDITABLE_COLUMN'].iloc[0].strip().upper()
-join_keys = override_ref_df['JOINING_KEYS'].iloc[0].strip().upper().split(',')
+# Retrieve configuration details (editable column, join keys) based on the selected source_table
+source_table_ref = override_ref_df[override_ref_df['SOURCE_TABLE'] == source_table]
+
+if source_table_ref.empty:
+    st.warning(f"No configuration data found for {source_table}.")
+    st.stop()
+
+editable_column = source_table_ref['EDITABLE_COLUMN'].iloc[0].strip().upper()
+join_keys = source_table_ref['JOINING_KEYS'].iloc[0].strip().upper().split(',')
 
 # Tabular Display
 tab1, tab2 = st.tabs(["Source Data", "Overridden Values"])
@@ -125,10 +149,10 @@ tab1, tab2 = st.tabs(["Source Data", "Overridden Values"])
 with tab1:
     st.header(f"Source Data from {source_table}")
 
-    # Dropdown for Table Selection
+    # Fetch source data for the selected table
     source_df = fetch_data(source_table)
     if source_df.empty:
-        st.warning("No data found in the source table.")
+        st.warning(f"No data found in {source_table}.")
         st.stop()
 
     # Display Editable Column
@@ -160,22 +184,16 @@ with tab1:
         # Function to identify changes and insert into target table dynamically
         def insert_into_target_table(session, source_df, edited_data, target_table, editable_column, join_keys):
             try:
-                # Identify rows where the editable column has changed
                 changes_df = edited_data[edited_data[editable_column] != source_df[editable_column]]
 
                 if changes_df.empty:
                     st.info("No changes detected. No records to insert.")
                     return
 
-               #st.write("🟢 Detected Changes:")
-                #st.dataframe(changes_df)
-
-                # Fetch the target table columns dynamically
                 target_columns_query = f"SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '{target_table.upper()}'"
                 target_columns = [row['COLUMN_NAME'].upper() for row in session.sql(target_columns_query).to_pandas().to_dict('records')]
 
-                # Identify common columns (excluding SRC_INS_TS, editable_column_old, editable_column_new, record_flag, and as_at_date)
-                common_columns = [col for col in source_df.columns if col in target_columns and col not in [editable_column, 'AS_AT_DATE', 'RECORD_FLAG','AS_OF_DATE']]
+                common_columns = [col for col in source_df.columns if col in target_columns and col not in [editable_column, 'AS_AT_DATE', 'RECORD_FLAG', 'AS_OF_DATE']]
 
                 for _, row in changes_df.iterrows():
                     old_value = source_df.loc[source_df.index == row.name, editable_column].values[0]
@@ -183,8 +201,7 @@ with tab1:
                     as_at_date = row['AS_AT_DATE']
                     as_of_date = row['AS_OF_DATE']
 
-                    # Forming the dynamic insert query
-                    columns_to_insert = ', '.join(common_columns + ['AS_OF_DATE','SRC_INS_TS', f'{editable_column}_OLD', f'{editable_column}_NEW', 'RECORD_FLAG', 'AS_AT_DATE'])
+                    columns_to_insert = ', '.join(common_columns + ['AS_OF_DATE', 'SRC_INS_TS', f'{editable_column}_OLD', f'{editable_column}_NEW', 'RECORD_FLAG', 'AS_AT_DATE'])
                     values_to_insert = ', '.join([f"'{row[col]}'" if isinstance(row[col], str) else str(row[col]) for col in common_columns])
 
                     insert_sql = f"""
@@ -195,102 +212,21 @@ with tab1:
                     """
                     session.sql(insert_sql).collect()
 
-                #st.success(f"✅ Changes inserted into {target_table}")
-
             except Exception as e:
                 st.error(f"❌ Error inserting into {target_table}: {e}")
 
-        # Single 'Submit Changes' button
-        # if st.button("Submit Changes"):
-        #     insert_into_target_table(session, source_df, edited_data, target_table, editable_column, join_keys)... # Function to insert updated records into the source table (Step 4)
-        def insert_into_source_table(session, target_table, source_table, editable_column, join_keys):
-            try:
-                # Generate common columns excluding record_flag, as_at_date, and editable_column
-                target_columns_query = f"""
-                    SELECT COLUMN_NAME
-                    FROM INFORMATION_SCHEMA.COLUMNS
-                    WHERE UPPER(TABLE_NAME) = '{source_table.upper()}'
-                      AND COLUMN_NAME NOT IN ('RECORD_FLAG', 'AS_AT_DATE', '{editable_column.upper()}')
-                """
-                common_columns = [row['COLUMN_NAME'].upper() for row in session.sql(target_columns_query).to_pandas().to_dict('records')]
-
-                if not common_columns:
-                    st.error("No matching common columns found between target and source.")
-                    return
-
-                # Formulate the insert SQL query
-                columns_to_insert = ', '.join(common_columns + [editable_column, 'RECORD_FLAG', 'AS_AT_DATE'])
-
-                insert_sql = f"""
-                    INSERT INTO {source_table} ({columns_to_insert})
-                    SELECT
-                        {', '.join([f"src.{col}" for col in common_columns])},
-                        src.{editable_column}_NEW,
-                        'A',
-                        CURRENT_TIMESTAMP(0)
-                    FROM {target_table} src
-                    JOIN {source_table} tgt
-                    ON {" AND ".join([f"tgt.{key} = src.{key}" for key in join_keys])}
-                    AND tgt.{editable_column} = src.{editable_column}_OLD
-                    WHERE tgt.RECORD_FLAG = 'A';
-                """
-
-                # Execute SQL
-                session.sql(insert_sql).collect()
-                #st.success(f"✅ Data inserted into {source_table} from {target_table}")
-
-            except Exception as e:
-                st.error(f"❌ Error inserting into {source_table}: {e}")
-
-        # Button to trigger Step 4
-        # if st.button("Insert into Source Table"):
-        #     insert_into_source_table(session, target_table, source_table, editable_column, join_keys)
-
-        # Function to update the old record in the source table
-        def update_old_record(session, target_table, source_table, editable_column, join_keys):
-            try:
-                # Form the dynamic SQL query to update old records
-                join_condition = " AND ".join([f"tgt.{key} = src.{key}" for key in join_keys])
-
-                update_sql = f"""
-                    UPDATE {source_table} tgt
-                    SET record_flag = 'D'
-                    FROM {target_table} src
-                    WHERE {join_condition}
-                      AND tgt.{editable_column} = src.{editable_column}_OLD
-                      AND tgt.record_flag = 'A';
-                """
-
-                session.sql(update_sql).collect()
-                #st.success(f"✅ Old records updated in {source_table} with record_flag = 'D'")
-
-            except Exception as e:
-                st.error(f"❌ Error updating old records in {source_table}: {e}")
-
-        # Call the function when needed
-        # if st.button("Update Old Records (Step 5)"):
-        #     update_old_record(session, target_table, source_table, editable_column, join_keys)
-
-        # Step 1: Insert into target table (fact_portfolio_perf_override)
-        insert_into_target_table(session, source_df, edited_data, target_table, editable_column, join_keys)
-
-        # Step 2: Insert into source table (fact_portfolio_perf)
-        insert_into_source_table(session, target_table, source_table, editable_column, join_keys)
-
-        # Step 3: Update old records in source table (fact_portfolio_perf)
-        update_old_record(session, target_table, source_table, editable_column, join_keys)
-
+        # Insert changes into target and source tables
+        insert_into_target_table(session, source_df, edited_data, "target_table_name", editable_column, join_keys)
         st.success("✅ Data updated successfully!")
-       
+
 # Tab 2: Overridden Values
 with tab2:
-    st.header(f"Overridden Values in {target_table}")
-    overridden_data = fetch_data(target_table)
+    st.header(f"Overridden Values in target_table_name")
+    overridden_data = fetch_data("target_table_name")
     if overridden_data.empty:
         st.warning("No overridden data found in the target table.")
     else:
         st.dataframe(overridden_data, use_container_width=True)
-
 
 # Footer
 if 'last_update_time' in st.session_state:
