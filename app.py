@@ -118,14 +118,13 @@ if override_ref_df.empty:
 module_name = override_ref_df['MODULE_NAME'].iloc[0] if 'MODULE_NAME' in override_ref_df.columns else f"Module {module_number}"
 st.markdown(f"<div class='module-box'>{module_name}</div>", unsafe_allow_html=True)
 
-# Get dynamic description from override_ref based on the selected table
-description = override_ref_df[override_ref_df['SOURCE_TABLE'] == selected_table]['DESCRIPTION'].iloc[0] if 'DESCRIPTION' in override_ref_df.columns else "No description available."
-
-st.markdown(f"<p>{description}</p>", unsafe_allow_html=True)
 # Dropdown for table selection based on module-level configuration
 table_options = override_ref_df['SOURCE_TABLE'].unique()
 selected_table = st.selectbox("Select Table", options=table_options)
 
+# Fetch table description from override_ref
+selected_table_description = override_ref_df[override_ref_df['SOURCE_TABLE'] == selected_table]['DESCRIPTION'].iloc[0] if not override_ref_df[override_ref_df['SOURCE_TABLE'] == selected_table].empty else "No description available."
+st.markdown(f"<p style='text-align:center; font-size:16px;'>{selected_table_description}</p>", unsafe_allow_html=True)
 # Function to fetch data from a given table
 def fetch_data(table_name):
     try:
