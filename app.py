@@ -61,7 +61,6 @@ st.markdown("""
 # Title with custom styling
 st.markdown("<h1 style='text-align: center; color: #1E88E5;'>Override Dashboard</h1>", unsafe_allow_html=True)
 
-# Retrieve Snowflake credentials from Streamlit secrets
 # Connect to Snowflake
 def connect_to_snowflake():
     try:
@@ -83,28 +82,37 @@ def connect_to_snowflake():
 session = connect_to_snowflake()
 
 # Retrieve Configuration Data from Override_Ref
-def fetch_override_ref_data(module_name):
+def fetch_override_ref_data(module_number):
     try:
-        df = session.sql(f"SELECT * FROM override_ref WHERE module_name = '{module_name}'").to_pandas()
+        df = session.sql(f"SELECT * FROM override_ref WHERE module = {module_number}").to_pandas()
         return df
     except Exception as e:
         st.error(f"Error fetching Override_Ref data: {e}")
         return pd.DataFrame()
 
-# Example - Assuming module name is passed via query parameters
-query_params = st.experimental_get_query_params()
-module_name = query_params.get("module_name", ["Default Module"])[0]
-module_url = query_params.get("module_url", ["default_url"])[0]
+# Get module number from query parameters
+query_params = st.query_params
+module_number = query_params.get("module", "1")  # Default to "1" if not provided
 
-# Display module name in ice-blue color
-st.markdown(f"<div class='module-box'>{module_name}</div>", unsafe_allow_html=True)
+# Validate if module_number is a digit
+if isinstance(module_number, list):
+    module_number = module_number[0]  # Take the first element if it's a list
 
+if not module_number.isdigit():
+    st.error("Invalid module number. Please provide a numeric value.")
+    st.stop()
 
-override_ref_df = fetch_override_ref_data(module_name)
+module_number = int(module_number)  # Convert to integer
+
+override_ref_df = fetch_override_ref_data(module_number)
 
 if override_ref_df.empty:
     st.warning("No configuration data found in Override_Ref.")
     st.stop()
+
+# Display module name based on module_number
+module_name = override_ref_df['MODULE_NAME'].iloc[0] if 'MODULE_NAME' in override_ref_df.columns else f"Module {module_number}"
+st.markdown(f"<div class='module-box'>{module_name}</div>", unsafe_allow_html=True)
 
 # Dropdown for table selection based on module-level configuration
 table_options = override_ref_df['SOURCE_TABLE'].unique()
@@ -122,11 +130,12 @@ def fetch_data(table_name):
         st.error(f"Error fetching data from {table_name}: {e}")
         return pd.DataFrame()
 
-# Extract source and target table names, editable column, and join keys
-source_table = selected_table
-target_table = override_ref_df[override_ref_df['SOURCE_TABLE'] == selected_table]['TARGET_TABLE'].iloc[0]
-editable_column = override_ref_df[override_ref_df['SOURCE_TABLE'] == selected_table]['EDITABLE_COLUMN'].iloc[0].strip().upper()
-join_keys = override_ref_df[override_ref_df['SOURCE_TABLE'] == selected_table]['JOINING_KEYS'].iloc[0].strip().upper().split(',')
+# Extract configuration data for the selected table
+config = override_ref_df[override_ref_df['SOURCE_TABLE'] == selected_table].iloc[0]
+source_table = config['SOURCE_TABLE']
+target_table = config['TARGET_TABLE']
+editable_column = config['EDITABLE_COLUMN'].strip().upper()
+join_keys = config['JOINING_KEYS'].strip().upper().split(',')
 
 # Tabular Display
 tab1, tab2 = st.tabs(["Source Data", "Overridden Values"])
