@@ -7,20 +7,20 @@ from datetime import datetime
 st.set_page_config(
     page_title="Editable Data Override App",
     page_icon="📊",
-    layout="centered"  # Match the layout you want
+    layout="centered"
 )
 
-# Custom CSS for styling (consistent style)
+# Custom CSS for styling
 st.markdown("""
     <style>
-        .css-18e3th9 {background-color: #F0F2F6;} /* Light grey background */
+        .css-18e3th9 {background-color: #F0F2F6;}
         .css-1kyxreq {border-radius: 12px; padding: 20px;}
         .css-1b36jdy {text-align: center;}
         .stButton>button {background-color: #1E88E5; color: white; border-radius: 5px; height: 40px;}
         .stSelectbox>label {font-size: 16px;}
         .stDataFrame {border: 1px solid #dddddd; border-radius: 8px;}
         .module-box {
-            background-color: #D3E8FF; /* Ice-blue box for module */
+            background-color: #D3E8FF;
             padding: 15px;
             border-radius: 8px;
             font-size: 20px;
@@ -122,14 +122,6 @@ st.markdown(f"<div class='module-box'>{module_name}</div>", unsafe_allow_html=Tr
 table_options = override_ref_df['SOURCE_TABLE'].unique()
 selected_table = st.selectbox("Select Table", options=table_options)
 
-# Fetch table description from override_ref
-# Ensure that you're filtering the DataFrame correctly. Use .loc to avoid SettingWithCopyWarning
-selected_table_description = override_ref_df.loc[override_ref_df['SOURCE_TABLE'] == selected_table, 'DESCRIPTION'].iloc[0] if not override_ref_df.loc[override_ref_df['SOURCE_TABLE'] == selected_table].empty else "No description available."
-st.markdown(f"<p style='text-align:center; font-size:16px;'>{selected_table_description}</p>", unsafe_allow_html=True)
-
-
-selected_table_description = override_ref_df[override_ref_df['SOURCE_TABLE'] == selected_table]['DESCRIPTION'].iloc[0] if not override_ref_df[override_ref_df['SOURCE_TABLE'] == selected_table].empty else "No description available."
-st.markdown(f"<p style='text-align:center; font-size:16px;'>{selected_table_description}</p>", unsafe_allow_html=True)
 # Function to fetch data from a given table
 def fetch_data(table_name):
     try:
@@ -160,6 +152,9 @@ source_table = config['SOURCE_TABLE']
 target_table = config['TARGET_TABLE']
 editable_column = config['EDITABLE_COLUMN'].strip().upper()
 join_keys = config['JOINING_KEYS'].strip().upper().split(',')
+
+# Retrieve tooltip description from override_ref based on selected_table
+tooltip_description = override_ref_df.loc[override_ref_df['SOURCE_TABLE'] == selected_table, 'TOOLTIP_DESCRIPTION'].iloc[0] if 'TOOLTIP_DESCRIPTION' in override_ref_df.columns and not override_ref_df[override_ref_df['SOURCE_TABLE'] == selected_table].empty else "This action will update the data."
 
 # Tabular Display
 tab1, tab2 = st.tabs(["Source Data", "Overridden Values"])
@@ -194,8 +189,8 @@ with tab1:
         hide_index=True  # Remove the index column
     )
 
-    # Submit Updates Button
-    st.markdown('<div class="tooltip">Hover to see description<span class="tooltiptext">This action will update the data.</span></div>', unsafe_allow_html=True)
+    # Submit Updates Button with Dynamic Tooltip
+    st.markdown(f'<div class="tooltip">Hover to see description<span class="tooltiptext">{tooltip_description}</span></div>', unsafe_allow_html=True)
 
     if st.button("Submit Updates"):
         # Function to identify changes and insert into target table dynamically
@@ -334,7 +329,7 @@ with tab1:
         st.session_state.last_update_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         st.success("✅ Data updated successfully👍!")
-       
+
 # Tab 2: Overridden Values
 with tab2:
     st.header(f"Overridden Values in {target_table}")
@@ -343,7 +338,6 @@ with tab2:
         st.warning("No overridden data found in the target table.")
     else:
         st.dataframe(overridden_data, use_container_width=True)
-
 
 # Footer
 st.markdown("---")
