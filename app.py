@@ -272,12 +272,17 @@ with tab1:
                     update_sql = f"""
                         UPDATE {source_table}
                         SET record_flag = 'D'
-                        WHERE {' AND '.join([f"{key} = '{row[key]}'" if isinstance(row[key],str) else f"{key} = {row[key]}" for key in join_keys])}
+                        WHERE {' AND '.join([f"{key} = '{row[key]}'" if isinstance(row[key], str) else f"{key} = {row[key]}" for key in join_keys])}
                         AND {editable_column} = {old_value}
                         AND record_flag = 'A'
                     """
                   
-                    session.sql(update_sql).collect()
+                    try:
+                        session.sql(update_sql).collect()
+                    except Exception as e:
+                        st.error(f"❌ Error updating record_flag in source table: {e}")
+                        st.error(f"SQL Query: {update_sql}")
+                        raise
 
                     # Create a new row dictionary with updated values and 'A' record_flag
                     new_row = row.copy()
@@ -304,8 +309,12 @@ with tab1:
                         INSERT INTO {source_table} ({columns})
                         VALUES ({values})
                     """
-                
-                    session.sql(insert_sql).collect()
+                    try:
+                        session.sql(insert_sql).collect()
+                    except Exception as e:
+                        st.error(f"❌ Error inserting new record in source table: {e}")
+                        st.error(f"SQL Query: {insert_sql}")
+                        raise
 
                 st.success("✅ Source table updated successfully!")
 
@@ -329,6 +338,8 @@ with tab2:
         st.warning("No overridden data found in the target table.")
     else:
         st.dataframe(overridden_data, use_container_width=True)
+
+
 # Footer
 st.markdown("---")
 st.caption(f"Portfolio Performance Override System • Last updated: {st.session_state.last_update_time}")
