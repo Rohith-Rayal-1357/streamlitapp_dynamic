@@ -90,9 +90,9 @@ def fetch_override_ref_data(module_number):
         st.error(f"Error fetching Override_Ref data: {e}")
         return pd.DataFrame()
 
-# Get module number from query parameters
+# Example - Assuming module number is passed via query parameters
 query_params = st.query_params
-module_number = query_params.get("module", "1")  # Default to "1" if not provided
+module_number = query_params.get("module", "1")
 
 # Validate if module_number is a digit
 if isinstance(module_number, list):
@@ -102,7 +102,7 @@ if not module_number.isdigit():
     st.error("Invalid module number. Please provide a numeric value.")
     st.stop()
 
-module_number = int(module_number)  # Convert to integer
+module_number = int(module_number)
 
 override_ref_df = fetch_override_ref_data(module_number)
 
@@ -118,10 +118,10 @@ st.markdown(f"<div class='module-box'>{module_name}</div>", unsafe_allow_html=Tr
 table_options = override_ref_df['SOURCE_TABLE'].unique()
 selected_table = st.selectbox("Select Table", options=table_options)
 
-# Function to fetch data from a given table
+# Function to fetch data from a given table with record_flag filter
 def fetch_data(table_name):
     try:
-        query = f"SELECT * FROM {table_name}"
+        query = f"SELECT * FROM {table_name} WHERE RECORD_FLAG = 'A'"  # Filter for active records
         df = session.sql(query).to_pandas()
         # Convert column names to uppercase for consistency
         df.columns = [col.strip().upper() for col in df.columns]
@@ -144,8 +144,9 @@ tab1, tab2 = st.tabs(["Source Data", "Overridden Values"])
 with tab1:
     st.header(f"Source Data from {source_table}")
     source_df = fetch_data(source_table)
+
     if source_df.empty:
-        st.warning("No data found in the source table.")
+        st.warning("No active data found in the source table with RECORD_FLAG = 'A'.")
         st.stop()
 
     # Display Editable Column
@@ -184,9 +185,6 @@ with tab1:
                     st.info("No changes detected. No records to insert.")
                     return
 
-               #st.write("🟢 Detected Changes:")
-                #st.dataframe(changes_df)
-
                 # Fetch the target table columns dynamically
                 target_columns_query = f"SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '{target_table.upper()}'"
                 target_columns = [row['COLUMN_NAME'].upper() for row in session.sql(target_columns_query).to_pandas().to_dict('records')]
@@ -212,14 +210,10 @@ with tab1:
                     """
                     session.sql(insert_sql).collect()
 
-                #st.success(f"✅ Changes inserted into {target_table}")
-
             except Exception as e:
                 st.error(f"❌ Error inserting into {target_table}: {e}")
 
         # Single 'Submit Changes' button
-        # if st.button("Submit Changes"):
-        #     insert_into_target_table(session, source_df, edited_data, target_table, editable_column, join_keys)... # Function to insert updated records into the source table (Step 4)
         def insert_into_source_table(session, target_table, source_table, editable_column, join_keys):
             try:
                 # Generate common columns excluding record_flag, as_at_date, and editable_column
@@ -253,14 +247,9 @@ with tab1:
 
                 # Execute SQL
                 session.sql(insert_sql).collect()
-                #st.success(f"✅ Data inserted into {source_table} from {target_table}")
 
             except Exception as e:
                 st.error(f"❌ Error inserting into {source_table}: {e}")
-
-        # Button to trigger Step 4
-        # if st.button("Insert into Source Table"):
-        #     insert_into_source_table(session, target_table, source_table, editable_column, join_keys)
 
         # Function to update the old record in the source table
         def update_old_record(session, target_table, source_table, editable_column, join_keys):
@@ -278,14 +267,9 @@ with tab1:
                 """
 
                 session.sql(update_sql).collect()
-                #st.success(f"✅ Old records updated in {source_table} with record_flag = 'D'")
 
             except Exception as e:
                 st.error(f"❌ Error updating old records in {source_table}: {e}")
-
-        # Call the function when needed
-        # if st.button("Update Old Records (Step 5)"):
-        #     update_old_record(session, target_table, source_table, editable_column, join_keys)
 
         # Step 1: Insert into target table (fact_portfolio_perf_override)
         insert_into_target_table(session, source_df, edited_data, target_table, editable_column, join_keys)
