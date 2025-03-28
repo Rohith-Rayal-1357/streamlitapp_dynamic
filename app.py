@@ -276,7 +276,8 @@ with tab1:
                         CURRENT_TIMESTAMP(0)
                     FROM {target_table} src
                     JOIN {source_table} tgt
-                    ON {" AND ".join([f"tgt.{key} = src.{key}" for key in join_keys])}
+                    #ON {" AND ".join([f"tgt.{key} = src.{key}" for key in join_keys])}   # Replaces NULL with empty string for comparison
+                    ON {" AND ".join([f"COALESCE(tgt.{key}, '') = COALESCE(src.{key}, '')"  for key in join_keys])}
                     AND tgt.{editable_column} = src.{editable_column}_OLD
                     WHERE tgt.RECORD_FLAG = 'A';
                 """
