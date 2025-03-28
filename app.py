@@ -134,6 +134,18 @@ def fetch_data(table_name):
         st.error(f"Error fetching data from {table_name}: {e}")
         return pd.DataFrame()
 
+# Function to fetch data from the target table
+def fetch_target_data(target_table):
+    try:
+        query = f"SELECT * FROM {target_table}"
+        df = session.sql(query).to_pandas()
+        # Convert column names to uppercase for consistency
+        df.columns = [col.strip().upper() for col in df.columns]
+        return df
+    except Exception as e:
+        st.error(f"Error fetching data from {target_table}: {e}")
+        return pd.DataFrame()
+
 # Extract configuration data for the selected table
 config = override_ref_df[override_ref_df['SOURCE_TABLE'] == selected_table].iloc[0]
 source_table = config['SOURCE_TABLE']
@@ -216,7 +228,7 @@ with tab1:
             except Exception as e:
                 st.error(f"❌ Error inserting into {target_table}: {e}")
 
-        # Function to insert data into source table and update old records
+        # Single 'Submit Changes' button
         def insert_into_source_table(session, target_table, source_table, editable_column, join_keys):
             try:
                 # Generate common columns excluding record_flag, as_at_date, and editable_column
@@ -254,7 +266,7 @@ with tab1:
             except Exception as e:
                 st.error(f"❌ Error inserting into {source_table}: {e}")
 
-        # Function to update old records in the source table
+        # Function to update the old record in the source table
         def update_old_record(session, target_table, source_table, editable_column, join_keys):
             try:
                 # Form the dynamic SQL query to update old records
@@ -274,24 +286,29 @@ with tab1:
             except Exception as e:
                 st.error(f"❌ Error updating old records in {source_table}: {e}")
 
-        # Execute the sequence of data modifications
+        # Step 1: Insert into target table (fact_portfolio_perf_override)
         insert_into_target_table(session, source_df, edited_data, target_table, editable_column, join_keys)
+
+        # Step 2: Insert into source table (fact_portfolio_perf)
         insert_into_source_table(session, target_table, source_table, editable_column, join_keys)
+
+        # Step 3: Update old records in source table (fact_portfolio_perf)
         update_old_record(session, target_table, source_table, editable_column, join_keys)
 
         # Update the last update time in session state
         st.session_state.last_update_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         st.success("✅ Data updated successfully!")
-
+       
 # Tab 2: Overridden Values
 with tab2:
     st.header(f"Overridden Values in {target_table}")
-    overridden_data = fetch_data(target_table)
+    overridden_data = fetch_target_data(target_table)  # Use the new function here
     if overridden_data.empty:
         st.warning("No overridden data found in the target table.")
     else:
         st.dataframe(overridden_data, use_container_width=True)
+
 
 # Footer
 st.markdown("---")
