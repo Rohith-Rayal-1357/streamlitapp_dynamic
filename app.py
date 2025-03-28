@@ -319,7 +319,7 @@ with tab1:
         # Update the last update time in session state
         st.session_state.last_update_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        st.success("✅ Data updated successfully!")
+        st.success("✅ Data updated successfully👍!")
        
 # Tab 2: Overridden Values
 with tab2:
