@@ -307,37 +307,6 @@ with tab2:
     else:
         st.dataframe(overridden_data, use_container_width=True)
 
-# Function to fetch all data from a given table
-def fetch_all_data(table_name):
-    try:
-        query = f"SELECT * FROM {table_name}"
-        df = session.sql(query).to_pandas()
-        # Convert column names to uppercase for consistency
-        df.columns = [col.strip().upper() for col in df.columns]
-        return df
-    except Exception as e:
-        st.error(f"Error fetching all data from {table_name}: {e}")
-        return pd.DataFrame()
-
-# Tab 3: Display Source Table with All Records
-tab3, tab4 = st.tabs(["All Source Records", "All Target Records"])
-
-with tab3:
-    st.header(f"All Source Data from {source_table} (Including Previous and Latest Records)")
-    all_source_data = fetch_all_data(source_table)
-    if all_source_data.empty:
-        st.warning("No data found in the source table.")
-    else:
-        st.dataframe(all_source_data, use_container_width=True)  # Display all records
-
-with tab4:
-    st.header(f"All Data from {target_table} ")
-    all_target_data = fetch_all_data(target_table)
-    if all_target_data.empty:
-        st.warning("No data found in the source table.")
-    else:
-        st.dataframe(all_target_data, use_container_width=True)  # Display all records
-
 # Footer
 st.markdown("---")
 st.caption(f"Portfolio Performance Override System • Last updated: {st.session_state.last_update_time}")
