@@ -215,15 +215,33 @@ with tab1:
 
                     # Forming the dynamic insert query
                     columns_to_insert = ', '.join(common_columns + ['AS_OF_DATE','SRC_INS_TS', f'{editable_column}_OLD', f'{editable_column}_NEW', 'RECORD_FLAG', 'AS_AT_DATE'])
-                    values_to_insert = ', '.join([f"'{row[col]}'" if isinstance(row[col], str) else str(row[col]) for col in common_columns])
+                    
+                    # Prepare values, handling potential None or '' values
+                    values_to_insert = []
+                    for col in common_columns:
+                        value = row[col]
+                        if value is None or value == '':
+                            values_to_insert.append('NULL')  # Use NULL for Snowflake
+                        elif isinstance(value, str):
+                            values_to_insert.append(f"'{value}'")  # Enclose strings in single quotes
+                        else:
+                            values_to_insert.append(str(value))  # Convert non-string values to strings
+                    
+                    values_to_insert_str = ', '.join(values_to_insert)
+                    
 
                     insert_sql = f"""
                         INSERT INTO {target_table} ({columns_to_insert})
                         VALUES (
-                            {values_to_insert},'{as_of_date}', '{as_at_date}', {old_value}, {new_value}, 'O', CURRENT_TIMESTAMP()
+                            {values_to_insert_str},'{as_of_date}', '{as_at_date}', {old_value}, {new_value}, 'A', CURRENT_TIMESTAMP()
                         )
                     """
-                    session.sql(insert_sql).collect()
+                    try:
+                        session.sql(insert_sql).collect()
+                    except Exception as e:
+                        st.error(f"❌ Error inserting record: {e}")
+                        st.error(f"SQL Query: {insert_sql}")
+                        raise
 
             except Exception as e:
                 st.error(f"❌ Error inserting into {target_table}: {e}")
