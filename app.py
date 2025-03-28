@@ -122,7 +122,7 @@ st.markdown(f"<div class='module-box'>{module_name}</div>", unsafe_allow_html=Tr
 table_options = override_ref_df['SOURCE_TABLE'].unique()
 selected_table = st.selectbox("Select Table", options=table_options)
 
-# Function to fetch data from a given table with filtering for RECORD_FLAG = 'A'
+# Function to fetch data from a given table
 def fetch_data(table_name):
     try:
         query = f"SELECT * FROM {table_name} WHERE RECORD_FLAG = 'A'"
@@ -236,7 +236,7 @@ with tab1:
                     insert_sql = f"""
                         INSERT INTO {target_table} ({columns_to_insert})
                         VALUES (
-                            {values_to_insert_str},'{as_of_date}', CURRENT_TIMESTAMP(), {old_value}, {new_value}, 'A', '{as_at_date}'
+                            {values_to_insert_str},'{as_of_date}', CURRENT_TIMESTAMP(), {old_value}, {new_value}, 'O', '{as_at_date}'
                         )
                     """
                     try:
@@ -263,25 +263,48 @@ with tab1:
                     # Get old and new values
                     old_value = source_df.loc[source_df.index == row.name, editable_column].values[0]
                     new_value = row[editable_column]
+                    
+                    # Convert join_keys to a list of strings if it's not already
+                    if isinstance(join_keys, str):
+                        join_keys = [key.strip() for key in join_keys.split(',')]
 
                     # Construct the UPDATE query to set record_flag to 'D' for the old record
                     update_sql = f"""
                         UPDATE {source_table}
                         SET record_flag = 'D'
-                        WHERE {' AND '.join([f"{key} = '{row[key]}'" for key in join_keys])}
+                        WHERE {' AND '.join([f"{key} = '{row[key]}'" if isinstance(row[key],str) else f"{key} = {row[key]}" for key in join_keys])}
                         AND {editable_column} = {old_value}
                         AND record_flag = 'A'
                     """
+                  
                     session.sql(update_sql).collect()
 
+                    # Create a new row dictionary with updated values and 'A' record_flag
+                    new_row = row.copy()
+                    new_row['RECORD_FLAG'] = 'A'  # Set record_flag to 'A'
+                  
+                    #Prepare values, handling potential None or '' values
+                    values_to_insert = []
+                    for col in source_df.columns:
+                        value = new_row[col]
+                        if pd.isna(value):  # Check for NaN or None
+                            values_to_insert.append('NULL')  # Use NULL for Snowflake
+                        elif isinstance(value, str):
+                            # Escape single quotes within the string by replacing them with double single quotes
+                            value = value.replace("'", "''")
+                            values_to_insert.append(f"'{value}'")  # Enclose strings in single quotes
+                        else:
+                            values_to_insert.append(str(value))  # Convert non-string values to strings
+                        
                     # Construct the INSERT query to insert the new record with record_flag = 'A'
                     columns = ', '.join(source_df.columns)
-                    values = ', '.join([f"'{row[col]}'" if isinstance(row[col], str) else str(row[col]) for col in source_df.columns])
-
+                    values = ', '.join(values_to_insert)
+                  
                     insert_sql = f"""
                         INSERT INTO {source_table} ({columns})
                         VALUES ({values})
                     """
+                
                     session.sql(insert_sql).collect()
 
                 st.success("✅ Source table updated successfully!")
@@ -296,8 +319,8 @@ with tab1:
         # Update the last update time in session state
         st.session_state.last_update_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        st.success("✅ Data updated successfully!")
-
+        st.success("✅ Data updated successfully👍!")
+       
 # Tab 2: Overridden Values
 with tab2:
     st.header(f"Overridden Values in {target_table}")
@@ -306,7 +329,6 @@ with tab2:
         st.warning("No overridden data found in the target table.")
     else:
         st.dataframe(overridden_data, use_container_width=True)
-
 # Footer
 st.markdown("---")
 st.caption(f"Portfolio Performance Override System • Last updated: {st.session_state.last_update_time}")
