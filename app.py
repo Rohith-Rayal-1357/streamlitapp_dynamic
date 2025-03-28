@@ -201,7 +201,9 @@ with tab1:
                     return
 
                 # Fetch the target table columns dynamically
-                target_columns_query = f"SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '{target_table.upper()}'"
+                target_columns_query = f"""
+                    SELECT COLUMN_NAME
+                    FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '{target_table.upper()}'"""
                 target_columns = [row['COLUMN_NAME'].upper() for row in session.sql(target_columns_query).to_pandas().to_dict('records')]
 
                 # Identify common columns (excluding SRC_INS_TS, editable_column_old, editable_column_new, record_flag, and as_at_date)
@@ -215,25 +217,26 @@ with tab1:
 
                     # Forming the dynamic insert query
                     columns_to_insert = ', '.join(common_columns + ['AS_OF_DATE','SRC_INS_TS', f'{editable_column}_OLD', f'{editable_column}_NEW', 'RECORD_FLAG', 'AS_AT_DATE'])
-                    
+
                     # Prepare values, handling potential None or '' values
                     values_to_insert = []
                     for col in common_columns:
                         value = row[col]
-                        if value is None or value == '':
+                        if pd.isna(value):  # Check for NaN or None
                             values_to_insert.append('NULL')  # Use NULL for Snowflake
                         elif isinstance(value, str):
+                            # Escape single quotes within the string by replacing them with double single quotes
+                            value = value.replace("'", "''")
                             values_to_insert.append(f"'{value}'")  # Enclose strings in single quotes
                         else:
                             values_to_insert.append(str(value))  # Convert non-string values to strings
-                    
+
                     values_to_insert_str = ', '.join(values_to_insert)
-                    
 
                     insert_sql = f"""
                         INSERT INTO {target_table} ({columns_to_insert})
                         VALUES (
-                            {values_to_insert_str},'{as_of_date}', '{as_at_date}', {old_value}, {new_value}, 'A', CURRENT_TIMESTAMP()
+                            {values_to_insert_str},'{as_of_date}', CURRENT_TIMESTAMP(), {old_value}, {new_value}, 'A', '{as_at_date}'
                         )
                     """
                     try:
