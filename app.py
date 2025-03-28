@@ -208,7 +208,7 @@ with tab1:
                     insert_sql = f"""
                         INSERT INTO {target_table} ({columns_to_insert})
                         VALUES (
-                            {values_to_insert},'{as_of_date}', '{as_at_date}', {old_value}, {new_value}, 'O', CURRENT_TIMESTAMP()
+                            {values_to_insert},'{as_of_date}', '{as_at_date}', {old_value}, {new_value}, 'A', CURRENT_TIMESTAMP()
                         )
                     """
                     session.sql(insert_sql).collect()
@@ -216,7 +216,7 @@ with tab1:
             except Exception as e:
                 st.error(f"❌ Error inserting into {target_table}: {e}")
 
-        # Single 'Submit Changes' button
+        # Function to insert data into source table and update old records
         def insert_into_source_table(session, target_table, source_table, editable_column, join_keys):
             try:
                 # Generate common columns excluding record_flag, as_at_date, and editable_column
@@ -254,7 +254,7 @@ with tab1:
             except Exception as e:
                 st.error(f"❌ Error inserting into {source_table}: {e}")
 
-        # Function to update the old record in the source table
+        # Function to update old records in the source table
         def update_old_record(session, target_table, source_table, editable_column, join_keys):
             try:
                 # Form the dynamic SQL query to update old records
@@ -274,20 +274,16 @@ with tab1:
             except Exception as e:
                 st.error(f"❌ Error updating old records in {source_table}: {e}")
 
-        # Step 1: Insert into target table (fact_portfolio_perf_override)
+        # Execute the sequence of data modifications
         insert_into_target_table(session, source_df, edited_data, target_table, editable_column, join_keys)
-
-        # Step 2: Insert into source table (fact_portfolio_perf)
         insert_into_source_table(session, target_table, source_table, editable_column, join_keys)
-
-        # Step 3: Update old records in source table (fact_portfolio_perf)
         update_old_record(session, target_table, source_table, editable_column, join_keys)
 
         # Update the last update time in session state
         st.session_state.last_update_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         st.success("✅ Data updated successfully!")
-       
+
 # Tab 2: Overridden Values
 with tab2:
     st.header(f"Overridden Values in {target_table}")
@@ -296,7 +292,6 @@ with tab2:
         st.warning("No overridden data found in the target table.")
     else:
         st.dataframe(overridden_data, use_container_width=True)
-
 
 # Footer
 st.markdown("---")
