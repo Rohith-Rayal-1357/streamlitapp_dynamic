@@ -61,6 +61,10 @@ st.markdown("""
 # Title with custom styling
 st.markdown("<h1 style='text-align: center; color: #1E88E5;'>Override Dashboard</h1>", unsafe_allow_html=True)
 
+# Initialize session state for last update time
+if 'last_update_time' not in st.session_state:
+    st.session_state.last_update_time = "N/A"
+
 # Connect to Snowflake
 def connect_to_snowflake():
     try:
@@ -92,7 +96,7 @@ def fetch_override_ref_data(module_number):
 
 # Example - Assuming module number is passed via query parameters
 query_params = st.query_params
-module_number = query_params.get("module", "1")
+module_number = query_params.get("module", 1)
 
 # Validate if module_number is a digit
 if isinstance(module_number, list):
@@ -118,10 +122,10 @@ st.markdown(f"<div class='module-box'>{module_name}</div>", unsafe_allow_html=Tr
 table_options = override_ref_df['SOURCE_TABLE'].unique()
 selected_table = st.selectbox("Select Table", options=table_options)
 
-# Function to fetch data from a given table with record_flag filter
+# Function to fetch data from a given table
 def fetch_data(table_name):
     try:
-        query = f"SELECT * FROM {table_name} WHERE RECORD_FLAG = 'A'"  # Filter for active records
+        query = f"SELECT * FROM {table_name} WHERE RECORD_FLAG = 'A'"
         df = session.sql(query).to_pandas()
         # Convert column names to uppercase for consistency
         df.columns = [col.strip().upper() for col in df.columns]
@@ -144,9 +148,8 @@ tab1, tab2 = st.tabs(["Source Data", "Overridden Values"])
 with tab1:
     st.header(f"Source Data from {source_table}")
     source_df = fetch_data(source_table)
-
     if source_df.empty:
-        st.warning("No active data found in the source table with RECORD_FLAG = 'A'.")
+        st.warning("No data found in the source table.")
         st.stop()
 
     # Display Editable Column
@@ -280,6 +283,9 @@ with tab1:
         # Step 3: Update old records in source table (fact_portfolio_perf)
         update_old_record(session, target_table, source_table, editable_column, join_keys)
 
+        # Update the last update time in session state
+        st.session_state.last_update_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
         st.success("✅ Data updated successfully!")
        
 # Tab 2: Overridden Values
@@ -293,10 +299,5 @@ with tab2:
 
 
 # Footer
-if 'last_update_time' in st.session_state:
-    last_update_time = st.session_state.last_update_time
-    st.markdown("---")
-    st.caption(f"Portfolio Performance Override System • Last updated: {last_update_time}")
-else:
-    st.markdown("---")
-    st.caption("Portfolio Performance Override System • Last updated: N/A")
+st.markdown("---")
+st.caption(f"Portfolio Performance Override System • Last updated: {st.session_state.last_update_time}")
