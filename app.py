@@ -292,7 +292,10 @@ with tab1:
         def update_old_record(session, target_table, source_table, editable_column, join_keys):
             try:
                 # Form the dynamic SQL query to update old records
-                join_condition = " AND ".join([f"tgt.{key} = src.{key}" for key in join_keys])
+                        join_condition = " AND ".join([
+            f"COALESCE(tgt.{key}, '') = COALESCE(src.{key}, '')"  # Handle NULL/empty values
+            for key in join_keys])
+
 
                 update_sql = f"""
                     UPDATE {source_table} tgt
