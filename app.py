@@ -291,25 +291,28 @@ with tab1:
         # Function to update the old record in the source table
         def update_old_record(session, target_table, source_table, editable_column, join_keys):
             try:
-                # Form the dynamic SQL query to update old records
-             join_condition = " AND ".join([
+        # Form the dynamic SQL query to update old records
+            join_condition = " AND ".join([
             f"COALESCE(tgt.{key}, '') = COALESCE(src.{key}, '')"  # Handle NULL/empty values in join keys
             for key in join_keys
         ])
-               
-                update_sql = f"""
-                    UPDATE {source_table} tgt
-                    SET record_flag = 'D'
-                    FROM {target_table} src
-                    WHERE {join_condition}
-                      AND tgt.{editable_column} = src.{editable_column}_OLD
-                      AND tgt.record_flag = 'A';
-                """
 
-                session.sql(update_sql).collect()
+        update_sql = f"""
+            UPDATE {source_table} tgt
+            SET record_flag = 'D'
+            FROM {target_table} src
+            WHERE {join_condition}
+              AND tgt.{editable_column} = src.{editable_column}_OLD
+              AND tgt.record_flag = 'A';
+        """
 
-            except Exception as e:
-                st.error(f"❌ Error updating old records in {source_table}: {e}")
+        # Execute the update SQL
+        session.sql(update_sql).collect()
+
+    except Exception as e:
+        # Handle and display any errors
+        st.error(f"❌ Error updating old records in {source_table}: {e}")
+
 
         # Step 1: Insert into target table (fact_portfolio_perf_override)
         insert_into_target_table(session, source_df, edited_data, target_table, editable_column, join_keys)
