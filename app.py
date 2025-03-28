@@ -205,7 +205,7 @@ with tab1:
                     insert_sql = f"""
                         INSERT INTO {target_table} ({columns_to_insert})
                         VALUES (
-                            {values_to_insert},'{as_of_date}', '{as_at_date}', {old_value}, {new_value}, 'A', CURRENT_TIMESTAMP()
+                            {values_to_insert},'{as_of_date}', '{as_at_date}', {old_value}, {new_value}, 'O', CURRENT_TIMESTAMP()
                         )
                     """
                     session.sql(insert_sql).collect()
