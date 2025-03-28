@@ -154,7 +154,11 @@ editable_column = config['EDITABLE_COLUMN'].strip().upper()
 join_keys = config['JOINING_KEYS'].strip().upper().split(',')
 
 # Retrieve tooltip description from override_ref based on selected_table
-tooltip_description = override_ref_df.loc[override_ref_df['SOURCE_TABLE'] == selected_table, 'TOOLTIP_DESCRIPTION'].iloc[0] if 'TOOLTIP_DESCRIPTION' in override_ref_df.columns and not override_ref_df[override_ref_df['SOURCE_TABLE'] == selected_table].empty else "This action will update the data."
+# Use .loc for safer access and handle missing 'TOOLTIP_DESCRIPTION' column
+if 'TOOLTIP_DESCRIPTION' in override_ref_df.columns:
+    tooltip_description = override_ref_df.loc[override_ref_df['SOURCE_TABLE'] == selected_table, 'TOOLTIP_DESCRIPTION'].iloc[0] if not override_ref_df.loc[override_ref_df['SOURCE_TABLE'] == selected_table].empty else "This action will update the data."
+else:
+    tooltip_description = "This action will update the data."
 
 # Tabular Display
 tab1, tab2 = st.tabs(["Source Data", "Overridden Values"])
@@ -189,7 +193,7 @@ with tab1:
         hide_index=True  # Remove the index column
     )
 
-    # Submit Updates Button with Dynamic Tooltip
+    # Submit Updates Button
     st.markdown(f'<div class="tooltip">Hover to see description<span class="tooltiptext">{tooltip_description}</span></div>', unsafe_allow_html=True)
 
     if st.button("Submit Updates"):
@@ -279,7 +283,6 @@ with tab1:
                         CURRENT_TIMESTAMP(0)
                     FROM {target_table} src
                     JOIN {source_table} tgt
-                     -------#Replaces NULL with empty string for comparison  # ON {" AND ".join([f"tgt.{key} = src.{key}" for key in join_keys])}
                     ON {" AND ".join([f"COALESCE(tgt.{key}, '') = COALESCE(src.{key}, '')"  for key in join_keys])}
                     AND tgt.{editable_column} = src.{editable_column}_OLD
                     WHERE tgt.RECORD_FLAG = 'A';
