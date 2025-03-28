@@ -123,6 +123,11 @@ table_options = override_ref_df['SOURCE_TABLE'].unique()
 selected_table = st.selectbox("Select Table", options=table_options)
 
 # Fetch table description from override_ref
+# Ensure that you're filtering the DataFrame correctly. Use .loc to avoid SettingWithCopyWarning
+selected_table_description = override_ref_df.loc[override_ref_df['SOURCE_TABLE'] == selected_table, 'DESCRIPTION'].iloc[0] if not override_ref_df.loc[override_ref_df['SOURCE_TABLE'] == selected_table].empty else "No description available."
+st.markdown(f"<p style='text-align:center; font-size:16px;'>{selected_table_description}</p>", unsafe_allow_html=True)
+
+
 selected_table_description = override_ref_df[override_ref_df['SOURCE_TABLE'] == selected_table]['DESCRIPTION'].iloc[0] if not override_ref_df[override_ref_df['SOURCE_TABLE'] == selected_table].empty else "No description available."
 st.markdown(f"<p style='text-align:center; font-size:16px;'>{selected_table_description}</p>", unsafe_allow_html=True)
 # Function to fetch data from a given table
