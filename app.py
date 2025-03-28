@@ -296,6 +296,7 @@ with tab1:
             f"COALESCE(tgt.{key}, '') = COALESCE(src.{key}, '')"  # Handle NULL/empty values in join keys
             for key in join_keys
         ])
+               
                 update_sql = f"""
                     UPDATE {source_table} tgt
                     SET record_flag = 'D'
