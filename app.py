@@ -134,7 +134,7 @@ def fetch_data(table_name):
         st.error(f"Error fetching data from {table_name}: {e}")
         return pd.DataFrame()
 
-# Function to fetch all data from the target table
+# Function to fetch data from the target table
 def fetch_target_data(target_table):
     try:
         query = f"SELECT * FROM {target_table}"
@@ -159,9 +159,9 @@ tab1, tab2 = st.tabs(["Source Data", "Overridden Values"])
 # Tab 1: Source Data
 with tab1:
     st.header(f"Source Data from {source_table}")
-    source_df = fetch_data(source_table)  # Fetch active data only
+    source_df = fetch_data(source_table)
     if source_df.empty:
-        st.warning("No active data found in the source table.")
+        st.warning("No data found in the source table.")
         st.stop()
 
     # Display Editable Column
@@ -250,80 +250,71 @@ with tab1:
                 st.error(f"❌ Error inserting into {target_table}: {e}")
 
         # Single 'Submit Changes' button
-        def update_source_table(session, source_df, edited_data, source_table, editable_column, join_keys):
+        def insert_into_source_table(session, target_table, source_table, editable_column, join_keys):
             try:
-                # Identify rows where the editable column has changed
-                changes_df = edited_data[edited_data[editable_column] != source_df[editable_column]]
+                # Generate common columns excluding record_flag, as_at_date, and editable_column
+                target_columns_query = f"""
+                    SELECT COLUMN_NAME
+                    FROM INFORMATION_SCHEMA.COLUMNS
+                    WHERE UPPER(TABLE_NAME) = '{source_table.upper()}'
+                      AND COLUMN_NAME NOT IN ('RECORD_FLAG', 'AS_AT_DATE', '{editable_column.upper()}')
+                """
+                common_columns = [row['COLUMN_NAME'].upper() for row in session.sql(target_columns_query).to_pandas().to_dict('records')]
 
-                if changes_df.empty:
-                    st.info("No changes detected. No records to update.")
+                if not common_columns:
+                    st.error("No matching common columns found between target and source.")
                     return
 
-                for _, row in changes_df.iterrows():
-                    # Get old and new values
-                    old_value = source_df.loc[source_df.index == row.name, editable_column].values[0]
-                    new_value = row[editable_column]
-                    
-                    # Convert join_keys to a list of strings if it's not already
-                    if isinstance(join_keys, str):
-                        join_keys = [key.strip() for key in join_keys.split(',')]
+                # Formulate the insert SQL query
+                columns_to_insert = ', '.join(common_columns + [editable_column, 'RECORD_FLAG', 'AS_AT_DATE'])
+                insert_sql = f"""
+                    INSERT INTO {source_table} ({columns_to_insert})
+                    SELECT
+                        {', '.join([f"src.{col}" for col in common_columns])},
+                        src.{editable_column}_NEW,
+                        'A',
+                        CURRENT_TIMESTAMP(0)
+                    FROM {target_table} src
+                    JOIN {source_table} tgt
+                    ON {" AND ".join([f"tgt.{key} = src.{key}" for key in join_keys])}
+                    AND tgt.{editable_column} = src.{editable_column}_OLD
+                    WHERE tgt.RECORD_FLAG = 'A';
+                """
 
-                    # Construct the UPDATE query to set record_flag to 'D' for the old record
-                    update_sql = f"""
-                        UPDATE {source_table}
-                        SET record_flag = 'D'
-                        WHERE {' AND '.join([f"{key} = '{row[key]}'" if isinstance(row[key], str) else f"{key} = {row[key]}" for key in join_keys])}
-                        AND {editable_column} = {old_value}
-                        AND record_flag = 'A'
-                    """
-                  
-                    try:
-                        session.sql(update_sql).collect()
-                    except Exception as e:
-                        st.error(f"❌ Error updating record_flag in source table: {e}")
-                        st.error(f"SQL Query: {update_sql}")
-                        raise
-
-                    # Create a new row dictionary with updated values and 'A' record_flag
-                    new_row = row.copy()
-                    new_row['RECORD_FLAG'] = 'A'  # Set record_flag to 'A'
-                  
-                    #Prepare values, handling potential None or '' values
-                    values_to_insert = []
-                    for col in source_df.columns:
-                        value = new_row[col]
-                        if pd.isna(value):  # Check for NaN or None
-                            values_to_insert.append('NULL')  # Use NULL for Snowflake
-                        elif isinstance(value, str):
-                            # Escape single quotes within the string by replacing them with double single quotes
-                            value = value.replace("'", "''")
-                            values_to_insert.append(f"'{value}'")  # Enclose strings in single quotes
-                        else:
-                            values_to_insert.append(str(value))  # Convert non-string values to strings
-                        
-                    # Construct the INSERT query to insert the new record with record_flag = 'A'
-                    columns = ', '.join(source_df.columns)
-                    values = ', '.join(values_to_insert)
-                  
-                    insert_sql = f"""
-                        INSERT INTO {source_table} ({columns})
-                        VALUES ({values})
-                    """
-                    try:
-                        session.sql(insert_sql).collect()
-                    except Exception as e:
-                        st.error(f"❌ Error inserting new record in source table: {e}")
-                        st.error(f"SQL Query: {insert_sql}")
-                        raise
-
-                st.success("✅ Source table updated successfully!")
+                # Execute SQL
+                session.sql(insert_sql).collect()
 
             except Exception as e:
-                st.error(f"❌ Error updating source table: {e}")
-                st.error(f"Error details: {str(e)}")
+                st.error(f"❌ Error inserting into {source_table}: {e}")
 
-        # Step 1: Update source table (set old record_flag to 'D' and insert new record with record_flag = 'A')
-        update_source_table(session, source_df, edited_data, source_table, editable_column, join_keys)
+        # Function to update the old record in the source table
+        def update_old_record(session, target_table, source_table, editable_column, join_keys):
+            try:
+                # Form the dynamic SQL query to update old records
+                join_condition = " AND ".join([f"tgt.{key} = src.{key}" for key in join_keys])
+
+                update_sql = f"""
+                    UPDATE {source_table} tgt
+                    SET record_flag = 'D'
+                    FROM {target_table} src
+                    WHERE {join_condition}
+                      AND tgt.{editable_column} = src.{editable_column}_OLD
+                      AND tgt.record_flag = 'A';
+                """
+
+                session.sql(update_sql).collect()
+
+            except Exception as e:
+                st.error(f"❌ Error updating old records in {source_table}: {e}")
+
+        # Step 1: Insert into target table (fact_portfolio_perf_override)
+        insert_into_target_table(session, source_df, edited_data, target_table, editable_column, join_keys)
+
+        # Step 2: Insert into source table (fact_portfolio_perf)
+        insert_into_source_table(session, target_table, source_table, editable_column, join_keys)
+
+        # Step 3: Update old records in source table (fact_portfolio_perf)
+        update_old_record(session, target_table, source_table, editable_column, join_keys)
 
         # Update the last update time in session state
         st.session_state.last_update_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
