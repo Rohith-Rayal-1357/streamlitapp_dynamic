@@ -122,7 +122,7 @@ st.markdown(f"<div class='module-box'>{module_name}</div>", unsafe_allow_html=Tr
 table_options = override_ref_df['SOURCE_TABLE'].unique()
 selected_table = st.selectbox("Select Table", options=table_options)
 
-# Function to fetch data from a given table
+# Function to fetch data from a given table with filtering for RECORD_FLAG = 'A'
 def fetch_data(table_name):
     try:
         query = f"SELECT * FROM {table_name} WHERE RECORD_FLAG = 'A'"
@@ -134,7 +134,7 @@ def fetch_data(table_name):
         st.error(f"Error fetching data from {table_name}: {e}")
         return pd.DataFrame()
 
-# Function to fetch data from the target table
+# Function to fetch all data from the target table
 def fetch_target_data(target_table):
     try:
         query = f"SELECT * FROM {target_table}"
@@ -159,9 +159,9 @@ tab1, tab2 = st.tabs(["Source Data", "Overridden Values"])
 # Tab 1: Source Data
 with tab1:
     st.header(f"Source Data from {source_table}")
-    source_df = fetch_data(source_table)
+    source_df = fetch_data(source_table)  # Fetch active data only
     if source_df.empty:
-        st.warning("No data found in the source table.")
+        st.warning("No active data found in the source table.")
         st.stop()
 
     # Display Editable Column
@@ -236,7 +236,7 @@ with tab1:
                     insert_sql = f"""
                         INSERT INTO {target_table} ({columns_to_insert})
                         VALUES (
-                            {values_to_insert_str},'{as_of_date}', CURRENT_TIMESTAMP(), {old_value}, {new_value}, 'O', '{as_at_date}'
+                            {values_to_insert_str},'{as_of_date}', CURRENT_TIMESTAMP(), {old_value}, {new_value}, 'A', '{as_at_date}'
                         )
                     """
                     try:
@@ -250,77 +250,54 @@ with tab1:
                 st.error(f"❌ Error inserting into {target_table}: {e}")
 
         # Single 'Submit Changes' button
-        def insert_into_source_table(session, target_table, source_table, editable_column, join_keys):
+        def update_source_table(session, source_df, edited_data, source_table, editable_column, join_keys):
             try:
-                # Generate common columns excluding record_flag, as_at_date, and editable_column
-                target_columns_query = f"""
-                    SELECT COLUMN_NAME
-                    FROM INFORMATION_SCHEMA.COLUMNS
-                    WHERE UPPER(TABLE_NAME) = '{source_table.upper()}'
-                      AND COLUMN_NAME NOT IN ('RECORD_FLAG', 'AS_AT_DATE', '{editable_column.upper()}')
-                """
-                common_columns = [row['COLUMN_NAME'].upper() for row in session.sql(target_columns_query).to_pandas().to_dict('records')]
+                # Identify rows where the editable column has changed
+                changes_df = edited_data[edited_data[editable_column] != source_df[editable_column]]
 
-                if not common_columns:
-                    st.error("No matching common columns found between target and source.")
+                if changes_df.empty:
+                    st.info("No changes detected. No records to update.")
                     return
 
-                # Formulate the insert SQL query
-                columns_to_insert = ', '.join(common_columns + [editable_column, 'RECORD_FLAG', 'AS_AT_DATE'])
-                insert_sql = f"""
-                    INSERT INTO {source_table} ({columns_to_insert})
-                    SELECT
-                        {', '.join([f"src.{col}" for col in common_columns])},
-                        src.{editable_column}_NEW,
-                        'A',
-                        CURRENT_TIMESTAMP(0)
-                    FROM {target_table} src
-                    JOIN {source_table} tgt
-                    ON {" AND ".join([f"tgt.{key} = src.{key}" for key in join_keys])}
-                    AND tgt.{editable_column} = src.{editable_column}_OLD
-                    WHERE tgt.RECORD_FLAG = 'A';
-                """
+                for _, row in changes_df.iterrows():
+                    # Get old and new values
+                    old_value = source_df.loc[source_df.index == row.name, editable_column].values[0]
+                    new_value = row[editable_column]
 
-                # Execute SQL
-                session.sql(insert_sql).collect()
+                    # Construct the UPDATE query to set record_flag to 'D' for the old record
+                    update_sql = f"""
+                        UPDATE {source_table}
+                        SET record_flag = 'D'
+                        WHERE {' AND '.join([f"{key} = '{row[key]}'" for key in join_keys])}
+                        AND {editable_column} = {old_value}
+                        AND record_flag = 'A'
+                    """
+                    session.sql(update_sql).collect()
 
-            except Exception as e:
-                st.error(f"❌ Error inserting into {source_table}: {e}")
+                    # Construct the INSERT query to insert the new record with record_flag = 'A'
+                    columns = ', '.join(source_df.columns)
+                    values = ', '.join([f"'{row[col]}'" if isinstance(row[col], str) else str(row[col]) for col in source_df.columns])
 
-        # Function to update the old record in the source table
-        def update_old_record(session, target_table, source_table, editable_column, join_keys):
-            try:
-                # Form the dynamic SQL query to update old records
-                join_condition = " AND ".join([f"tgt.{key} = src.{key}" for key in join_keys])
+                    insert_sql = f"""
+                        INSERT INTO {source_table} ({columns})
+                        VALUES ({values})
+                    """
+                    session.sql(insert_sql).collect()
 
-                update_sql = f"""
-                    UPDATE {source_table} tgt
-                    SET record_flag = 'D'
-                    FROM {target_table} src
-                    WHERE {join_condition}
-                      AND tgt.{editable_column} = src.{editable_column}_OLD
-                      AND tgt.record_flag = 'A';
-                """
-
-                session.sql(update_sql).collect()
+                st.success("✅ Source table updated successfully!")
 
             except Exception as e:
-                st.error(f"❌ Error updating old records in {source_table}: {e}")
+                st.error(f"❌ Error updating source table: {e}")
+                st.error(f"Error details: {str(e)}")
 
-        # Step 1: Insert into target table (fact_portfolio_perf_override)
-        insert_into_target_table(session, source_df, edited_data, target_table, editable_column, join_keys)
-
-        # Step 2: Insert into source table (fact_portfolio_perf)
-        insert_into_source_table(session, target_table, source_table, editable_column, join_keys)
-
-        # Step 3: Update old records in source table (fact_portfolio_perf)
-        update_old_record(session, target_table, source_table, editable_column, join_keys)
+        # Step 1: Update source table (set old record_flag to 'D' and insert new record with record_flag = 'A')
+        update_source_table(session, source_df, edited_data, source_table, editable_column, join_keys)
 
         # Update the last update time in session state
         st.session_state.last_update_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        st.success("✅ Data updated successfully👍!")
-       
+        st.success("✅ Data updated successfully!")
+
 # Tab 2: Overridden Values
 with tab2:
     st.header(f"Overridden Values in {target_table}")
@@ -330,6 +307,36 @@ with tab2:
     else:
         st.dataframe(overridden_data, use_container_width=True)
 
+# Function to fetch all data from a given table
+def fetch_all_data(table_name):
+    try:
+        query = f"SELECT * FROM {table_name}"
+        df = session.sql(query).to_pandas()
+        # Convert column names to uppercase for consistency
+        df.columns = [col.strip().upper() for col in df.columns]
+        return df
+    except Exception as e:
+        st.error(f"Error fetching all data from {table_name}: {e}")
+        return pd.DataFrame()
+
+# Tab 3: Display Source Table with All Records
+tab3, tab4 = st.tabs(["All Source Records", "All Target Records"])
+
+with tab3:
+    st.header(f"All Source Data from {source_table} (Including Previous and Latest Records)")
+    all_source_data = fetch_all_data(source_table)
+    if all_source_data.empty:
+        st.warning("No data found in the source table.")
+    else:
+        st.dataframe(all_source_data, use_container_width=True)  # Display all records
+
+with tab4:
+    st.header(f"All Data from {target_table} ")
+    all_target_data = fetch_all_data(target_table)
+    if all_target_data.empty:
+        st.warning("No data found in the source table.")
+    else:
+        st.dataframe(all_target_data, use_container_width=True)  # Display all records
 
 # Footer
 st.markdown("---")
