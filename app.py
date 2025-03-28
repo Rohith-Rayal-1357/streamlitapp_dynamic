@@ -122,6 +122,12 @@ st.markdown(f"<div class='module-box'>{module_name}</div>", unsafe_allow_html=Tr
 table_options = override_ref_df['SOURCE_TABLE'].unique()
 selected_table = st.selectbox("Select Table", options=table_options)
 
+# Retrieve table information for the selected table
+table_info_df = override_ref_df[override_ref_df['SOURCE_TABLE'] == selected_table]
+
+# Fetch the description for the module from the Override_Ref table
+description = table_info_df['DESCRIPTION'].iloc[0] if 'DESCRIPTION' in table_info_df.columns else "No description available."
+
 # Function to fetch data from a given table
 def fetch_data(table_name):
     try:
@@ -152,13 +158,6 @@ source_table = config['SOURCE_TABLE']
 target_table = config['TARGET_TABLE']
 editable_column = config['EDITABLE_COLUMN'].strip().upper()
 join_keys = config['JOINING_KEYS'].strip().upper().split(',')
-
-# Retrieve tooltip description from override_ref based on selected_table
-# Use .loc for safer access and handle missing 'TOOLTIP_DESCRIPTION' column
-if 'TOOLTIP_DESCRIPTION' in override_ref_df.columns:
-    tooltip_description = override_ref_df.loc[override_ref_df['SOURCE_TABLE'] == selected_table, 'TOOLTIP_DESCRIPTION'].iloc[0] if not override_ref_df.loc[override_ref_df['SOURCE_TABLE'] == selected_table].empty else "This action will update the data."
-else:
-    tooltip_description = "This action will update the data."
 
 # Tabular Display
 tab1, tab2 = st.tabs(["Source Data", "Overridden Values"])
@@ -194,7 +193,7 @@ with tab1:
     )
 
     # Submit Updates Button
-    st.markdown(f'<div class="tooltip">Hover to see description<span class="tooltiptext">{tooltip_description}</span></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="tooltip">Hover to see description<span class="tooltiptext">{description}</span></div>', unsafe_allow_html=True)
 
     if st.button("Submit Updates"):
         # Function to identify changes and insert into target table dynamically
