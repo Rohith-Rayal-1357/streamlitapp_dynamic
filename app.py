@@ -83,22 +83,32 @@ def connect_to_snowflake():
 session = connect_to_snowflake()
 
 # Retrieve Configuration Data from Override_Ref
-def fetch_override_ref_data(module_number):
+def fetch_override_ref_data(module_name):
     try:
-        df = session.sql(f"SELECT * FROM override_ref WHERE module = {module_number}").to_pandas()
+        df = session.sql(f"SELECT * FROM override_ref WHERE module_name = '{module_name}'").to_pandas()
         return df
     except Exception as e:
         st.error(f"Error fetching Override_Ref data: {e}")
         return pd.DataFrame()
 
-# Example - Assuming module number is passed via query parameters
-query_params = st.query_params
-module_number = query_params.get("module", 1)
-override_ref_df = fetch_override_ref_data(module_number)
+# Example - Assuming module name is passed via query parameters
+query_params = st.experimental_get_query_params()
+module_name = query_params.get("module_name", ["Default Module"])[0]
+module_url = query_params.get("module_url", ["default_url"])[0]
+
+# Display module name in ice-blue color
+st.markdown(f"<div class='module-box'>{module_name}</div>", unsafe_allow_html=True)
+
+
+override_ref_df = fetch_override_ref_data(module_name)
 
 if override_ref_df.empty:
     st.warning("No configuration data found in Override_Ref.")
     st.stop()
+
+# Dropdown for table selection based on module-level configuration
+table_options = override_ref_df['SOURCE_TABLE'].unique()
+selected_table = st.selectbox("Select Table", options=table_options)
 
 # Function to fetch data from a given table
 def fetch_data(table_name):
@@ -113,10 +123,10 @@ def fetch_data(table_name):
         return pd.DataFrame()
 
 # Extract source and target table names, editable column, and join keys
-source_table = override_ref_df['SOURCE_TABLE'].iloc[0]
-target_table = override_ref_df['TARGET_TABLE'].iloc[0]
-editable_column = override_ref_df['EDITABLE_COLUMN'].iloc[0].strip().upper()
-join_keys = override_ref_df['JOINING_KEYS'].iloc[0].strip().upper().split(',')
+source_table = selected_table
+target_table = override_ref_df[override_ref_df['SOURCE_TABLE'] == selected_table]['TARGET_TABLE'].iloc[0]
+editable_column = override_ref_df[override_ref_df['SOURCE_TABLE'] == selected_table]['EDITABLE_COLUMN'].iloc[0].strip().upper()
+join_keys = override_ref_df[override_ref_df['SOURCE_TABLE'] == selected_table]['JOINING_KEYS'].iloc[0].strip().upper().split(',')
 
 # Tabular Display
 tab1, tab2 = st.tabs(["Source Data", "Overridden Values"])
@@ -124,8 +134,6 @@ tab1, tab2 = st.tabs(["Source Data", "Overridden Values"])
 # Tab 1: Source Data
 with tab1:
     st.header(f"Source Data from {source_table}")
-
-    # Dropdown for Table Selection
     source_df = fetch_data(source_table)
     if source_df.empty:
         st.warning("No data found in the source table.")
@@ -220,7 +228,6 @@ with tab1:
 
                 # Formulate the insert SQL query
                 columns_to_insert = ', '.join(common_columns + [editable_column, 'RECORD_FLAG', 'AS_AT_DATE'])
-
                 insert_sql = f"""
                     INSERT INTO {source_table} ({columns_to_insert})
                     SELECT
