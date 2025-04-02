@@ -233,12 +233,8 @@ with tab1:
                 for _, row in changes_df.iterrows():
                     old_value = source_df.loc[source_df.index == row.name, editable_column].values[0]
                     new_value = row[editable_column]
-		    
-                
                     as_of_date = row['AS_OF_DATE']
-                    src_ins_ts = row['AS_AT_DATE']  # Fetch SRC_INS_TS from AS_AT_DATE in the source table
-                    
-                    # Fetch the current timestamp dynamically
+                     # Fetch the current timestamp dynamically
                     current_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     columns_to_insert = ', '.join(common_columns + ['AS_OF_DATE','SRC_INS_TS', f'{editable_column}_OLD', f'{editable_column}_NEW', 'RECORD_FLAG', 'AS_AT_DATE'])
                     values_to_insert = []
@@ -257,7 +253,7 @@ with tab1:
                     insert_sql = f"""
                         INSERT INTO {target_table} ({columns_to_insert})
                         VALUES (
-                            {values_to_insert_str},'{as_of_date}', '{src_ins_ts}', {old_value}, {new_value}, 'O', '{current_timestamp}'
+                            {values_to_insert_str},'{as_of_date}', CURRENT_TIMESTAMP(), {old_value}, {new_value}, 'O', '{current_timestamp}'
                         )
                     """
                     try:
@@ -352,4 +348,4 @@ with tab2:
 
 # Footer
 st.markdown("---")
-st.caption(f"Portfolio Performance Override System • Last updated: {st.session_state.last_update_time}")
+st.caption(f"Portfolio Performance Override System • Last updated: {st.session_state.last_update_time}") 
