@@ -118,18 +118,12 @@ if override_ref_df.empty:
 module_name = override_ref_df['MODULE_NAME'].iloc[0] if 'MODULE_NAME' in override_ref_df.columns else f"Module {module_number}"
 st.markdown(f"<div class='module-box'>{module_name}</div>", unsafe_allow_html=True)
 
-# Search box for table selection
-search_query = st.text_input("Search for a table", placeholder="Enter table name")
+# Available table options
+available_tables = override_ref_df['SOURCE_TABLE'].unique()
 
-# Filter tables based on search query
-filtered_tables = [table for table in override_ref_df['SOURCE_TABLE'].unique() if search_query.lower() in table.lower()]
+# Select a table from the dropdown
+selected_table = st.selectbox("Select Table", options=available_tables)
 
-if not filtered_tables:
-    st.warning("No matching tables found.")
-    st.stop()
-
-# Select a table from the filtered list
-selected_table = st.selectbox("Select Table", options=filtered_tables)
 # Retrieve table information for the selected table
 table_info_df = override_ref_df[override_ref_df['SOURCE_TABLE'] == selected_table]
 
