@@ -118,17 +118,14 @@ if override_ref_df.empty:
 module_name = override_ref_df['MODULE_NAME'].iloc[0] if 'MODULE_NAME' in override_ref_df.columns else f"Module {module_number}"
 st.markdown(f"<div class='module-box'>{module_name}</div>", unsafe_allow_html=True)
 
-# Select a table from the list of available tables
-selected_table = st.selectbox("Select Table", options=override_ref_df['SOURCE_TABLE'].unique())
-
 # Retrieve table information for the selected table
-table_info_df = override_ref_df[override_ref_df['SOURCE_TABLE'] == selected_table]
+table_info_df = override_ref_df
 
 # Fetch the description for the module from the Override_Ref table
 description = table_info_df['DESCRIPTION'].iloc[0] if 'DESCRIPTION' in table_info_df.columns else "No description available."
 
 # Extract configuration data for the selected table
-config = override_ref_df[override_ref_df['SOURCE_TABLE'] == selected_table].iloc[0]
+config = override_ref_df.iloc[0]
 source_table = config['SOURCE_TABLE']
 target_table = config['TARGET_TABLE']
 editable_column = config['EDITABLE_COLUMN'].strip().upper()
@@ -191,7 +188,9 @@ with tab1:
     # Highlight the editable column and make it editable
     edited_data = st.data_editor(
         editable_df,
-        column_config={editable_column: st.column_config.NumberColumn(f"{editable_column} (Editable)✏️")},
+        column_config={
+            editable_column: st.column_config.NumberColumn(f"{editable_column} (Editable)✏️")
+        },
         disabled=[col for col in editable_df.columns if col != editable_column],
         use_container_width=True,
         hide_index=True  # Remove the index column
@@ -215,7 +214,6 @@ with tab1:
                     FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '{target_table.upper()}'
                 """
                 target_columns = [row['COLUMN_NAME'].upper() for row in session.sql(target_columns_query).to_pandas().to_dict('records')]
-
                 common_columns = [col for col in source_df.columns if col in target_columns and col not in [editable_column, 'AS_AT_DATE', 'RECORD_FLAG','AS_OF_DATE']]
                 
                 # Iterate over the changes and insert into the target table
@@ -224,6 +222,8 @@ with tab1:
                     new_value = row[editable_column]
                     as_at_date = row['AS_AT_DATE']
                     as_of_date = row['AS_OF_DATE']
+                     # Fetch the current timestamp dynamically
+                    #current_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     columns_to_insert = ', '.join(common_columns + ['AS_OF_DATE','SRC_INS_TS', f'{editable_column}_OLD', f'{editable_column}_NEW', 'RECORD_FLAG', 'AS_AT_DATE'])
                     values_to_insert = []
                     for col in common_columns:
@@ -254,8 +254,71 @@ with tab1:
             except Exception as e:
                 st.error(f"❌ Error inserting into {target_table}: {e}")
 
-        # Insert updates into target and source tables
+        # Single 'Submit Changes' button
+        def insert_into_source_table(session, target_table, source_table, editable_column, join_keys):
+            try:
+                target_columns_query = f"""
+                    SELECT COLUMN_NAME
+                    FROM INFORMATION_SCHEMA.COLUMNS
+                    WHERE UPPER(TABLE_NAME) = '{source_table.upper()}'
+                      AND COLUMN_NAME NOT IN ('RECORD_FLAG', 'AS_AT_DATE', '{editable_column.upper()}')
+                """
+                common_columns = [row['COLUMN_NAME'].upper() for row in session.sql(target_columns_query).to_pandas().to_dict('records')]
+
+                if not common_columns:
+                    st.error("No matching common columns found between target and source.")
+                    return
+
+                columns_to_insert = ', '.join(common_columns + [editable_column, 'RECORD_FLAG', 'AS_AT_DATE'])
+                insert_sql = f"""
+                    INSERT INTO {source_table} ({columns_to_insert})
+                    SELECT
+                        {', '.join([f"src.{col}" for col in common_columns])},
+                        src.{editable_column}_NEW,
+                        'A',
+                        CURRENT_TIMESTAMP(0)
+                    FROM {target_table} src
+                    JOIN {source_table} tgt
+                    ON {" AND ".join([f"COALESCE(tgt.{key}, '') = COALESCE(src.{key}, '')"  for key in join_keys])}
+                    AND tgt.{editable_column} = src.{editable_column}_OLD
+                    WHERE tgt.RECORD_FLAG = 'A';
+                """
+
+                session.sql(insert_sql).collect()
+
+            except Exception as e:
+                st.error(f"❌ Error inserting into {source_table}: {e}")
+
+        # Function to update the old record in the source table
+        def update_old_record(session, target_table, source_table, editable_column, join_keys):
+            try:
+                join_condition = " AND ".join([
+                    f"COALESCE(tgt.{key}, '') = COALESCE(src.{key}, '')"  
+                    for key in join_keys
+                ])
+
+                update_sql = f"""
+                    UPDATE {source_table} tgt
+                    SET record_flag = 'D'
+                    FROM {target_table} src
+                    WHERE {join_condition}
+                      AND tgt.{editable_column} = src.{editable_column}_OLD
+                      AND tgt.record_flag = 'A';
+                """
+
+                session.sql(update_sql).collect()
+
+            except Exception as e:
+                st.error(f"❌ Error updating old records in {source_table}: {e}")
+
+        # Step 1: Insert into target table (fact_portfolio_perf_override)
         insert_into_target_table(session, source_df, edited_data, target_table, editable_column, join_keys)
+
+        # Step 2: Insert into source table (fact_portfolio_perf)
+        insert_into_source_table(session, target_table, source_table, editable_column, join_keys)
+
+        # Step 3: Update old records in source table (fact_portfolio_perf)
+        update_old_record(session, target_table, source_table, editable_column, join_keys)
 
         # Update the last update time in session state
         st.session_state.last_update_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
