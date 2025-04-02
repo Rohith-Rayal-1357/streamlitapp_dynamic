@@ -27,8 +27,43 @@ st.markdown("""
             font-weight: bold;
             text-align: center;
         }
+        /* Tooltip CSS for styling */
+        .tooltip {
+            position: relative;
+            display: inline-block;
+            cursor: pointer;
+        }
+
+        .tooltip .tooltiptext {
+            visibility: hidden;
+            width: 250px;
+            background-color: #6c757d;
+            color: #fff;
+            text-align: center;
+            border-radius: 5px;
+            padding: 5px;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%; /* Position above the button */
+            left: 50%;
+            margin-left: -125px; /* Centers the tooltip */
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .tooltip:hover .tooltiptext {
+            visibility: visible;
+            opacity: 1;
+        }
     </style>
 """, unsafe_allow_html=True)
+
+# Title with custom styling
+st.title("Override Dashboard")
+
+# Initialize session state for last update time
+if 'last_update_time' not in st.session_state:
+    st.session_state.last_update_time = "N/A"
 
 # Connect to Snowflake
 def connect_to_snowflake():
@@ -63,6 +98,7 @@ def fetch_override_ref_data(module_number):
 query_params = st.query_params
 module_number = query_params.get("module", 1)
 
+# Validate if module_number is a digit
 if isinstance(module_number, list):
     module_number = module_number[0]  # Take the first element if it's a list
 
@@ -82,9 +118,18 @@ if override_ref_df.empty:
 module_name = override_ref_df['MODULE_NAME'].iloc[0] if 'MODULE_NAME' in override_ref_df.columns else f"Module {module_number}"
 st.markdown(f"<div class='module-box'>{module_name}</div>", unsafe_allow_html=True)
 
-# Dropdown for table selection based on module-level configuration
-table_options = override_ref_df['SOURCE_TABLE'].unique()
-selected_table = st.selectbox("Select Table", options=table_options)
+# Search box for table selection
+search_query = st.text_input("Search for a table", placeholder="Enter table name")
+
+# Filter tables based on search query
+filtered_tables = [table for table in override_ref_df['SOURCE_TABLE'].unique() if search_query.lower() in table.lower()]
+
+if not filtered_tables:
+    st.warning("No matching tables found.")
+    st.stop()
+
+# Select a table from the filtered list
+selected_table = st.selectbox("Select Table", options=filtered_tables)
 
 # Retrieve table information for the selected table
 table_info_df = override_ref_df[override_ref_df['SOURCE_TABLE'] == selected_table]
@@ -136,14 +181,12 @@ with tab1:
     # Display Editable Column
     st.markdown(f"Editable Column: {editable_column}")
 
-    # **Filtering Records**
-    filter_columns = source_df.columns.tolist()
-    filter_column = st.selectbox("Select Column to Filter", options=filter_columns)
-    filter_values = source_df[filter_column].unique()
-    selected_filter_values = st.multiselect("Select Values", options=filter_values)
+    # Search box for filtering records
+    search_filter = st.text_input("Search for records", placeholder="Enter search term")
 
-    if selected_filter_values:
-        filtered_df = source_df[source_df[filter_column].isin(selected_filter_values)]
+    # Filter records based on search query
+    if search_filter:
+        filtered_df = source_df[source_df.apply(lambda row: row.astype(str).str.contains(search_filter, case=False).any(), axis=1)]
     else:
         filtered_df = source_df
 
