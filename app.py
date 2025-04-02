@@ -118,23 +118,11 @@ if override_ref_df.empty:
 module_name = override_ref_df['MODULE_NAME'].iloc[0] if 'MODULE_NAME' in override_ref_df.columns else f"Module {module_number}"
 st.markdown(f"<div class='module-box'>{module_name}</div>", unsafe_allow_html=True)
 
-# # Search box for table selection
-search_query = st.text_input("Search for a table", placeholder="Enter table name")
-
-# # Filter tables based on search query
-filtered_tables = [table for table in override_ref_df['SOURCE_TABLE'].unique() if search_query.lower() in table.lower()]
-
-if not filtered_tables:
-    st.warning("No matching tables found.")
-    st.stop()
-
-# # Select a table from the filtered list
-selected_table = st.selectbox("Select Table", options=filtered_tables)
-
 # Retrieve table information for the selected table
-table_info_df = override_ref_df[override_ref_df['SOURCE_TABLE'] == selected_table]
+selected_table = override_ref_df['SOURCE_TABLE'].iloc[0]  # Default to the first table in the list
 
 # Fetch the description for the module from the Override_Ref table
+table_info_df = override_ref_df[override_ref_df['SOURCE_TABLE'] == selected_table]
 description = table_info_df['DESCRIPTION'].iloc[0] if 'DESCRIPTION' in table_info_df.columns else "No description available."
 
 # Extract configuration data for the selected table
@@ -237,7 +225,6 @@ with tab1:
                     as_at_date = row['AS_AT_DATE']
                     as_of_date = row['AS_OF_DATE']
                      # Fetch the current timestamp dynamically
-                    #current_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     columns_to_insert = ', '.join(common_columns + ['AS_OF_DATE','SRC_INS_TS', f'{editable_column}_OLD', f'{editable_column}_NEW', 'RECORD_FLAG', 'AS_AT_DATE'])
                     values_to_insert = []
                     for col in common_columns:
