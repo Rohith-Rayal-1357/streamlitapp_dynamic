@@ -119,7 +119,7 @@ module_name = override_ref_df['MODULE_NAME'].iloc[0] if 'MODULE_NAME' in overrid
 st.markdown(f"<div class='module-box'>{module_name}</div>", unsafe_allow_html=True)
 
 # Search box for table selection
-search_query = st.text_input("Search for a table", placeholder="Enter table name")
+#search_query = st.text_input("Search for a table", placeholder="Enter table name")
 
 # Filter tables based on search query
 filtered_tables = [table for table in override_ref_df['SOURCE_TABLE'].unique() if search_query.lower() in table.lower()]
