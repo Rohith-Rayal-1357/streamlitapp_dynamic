@@ -234,9 +234,11 @@ with tab1:
                     old_value = source_df.loc[source_df.index == row.name, editable_column].values[0]
                     new_value = row[editable_column]
                     as_of_date = row['AS_OF_DATE']
+                    src_ins_ts = row['AS_AT_DATE']  # Fetch SRC_INS_TS from AS_AT_DATE in the source table
+                    
                      # Fetch the current timestamp dynamically
                     current_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    columns_to_insert = ', '.join(common_columns + ['AS_OF_DATE','SRC_INS_TS', f'{editable_column}_OLD', f'{editable_column}_NEW', 'RECORD_FLAG', 'AS_AT_DATE'])
+                    columns_to_insert = ', '.join(common_columns + ['AS_OF_DATE','{src_ins_ts}', f'{editable_column}_OLD', f'{editable_column}_NEW', 'RECORD_FLAG', 'AS_AT_DATE'])
                     values_to_insert = []
                     for col in common_columns:
                         value = row[col]
