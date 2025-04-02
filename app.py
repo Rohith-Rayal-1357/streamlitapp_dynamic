@@ -59,7 +59,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Title with custom styling
-st.title("Override Dashboard")
+st.markdown("<h1 style='text-align: center; color: #1E88E5;'>Override Dashboard</h1>", unsafe_allow_html=True)
 
 # Initialize session state for last update time
 if 'last_update_time' not in st.session_state:
