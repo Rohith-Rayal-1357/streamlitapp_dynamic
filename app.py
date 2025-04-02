@@ -125,8 +125,8 @@ search_query = st.text_input("Search for a table", placeholder="Enter table name
 filtered_tables = [table for table in override_ref_df['SOURCE_TABLE'].unique() if search_query.lower() in table.lower()]
 
 if not filtered_tables:
-st.warning("No matching tables found.")
-st.stop()
+    st.warning("No matching tables found.")
+    st.stop()
 
 # # Select a table from the filtered list
 selected_table = st.selectbox("Select Table", options=filtered_tables)
